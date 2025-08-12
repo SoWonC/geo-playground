@@ -1,183 +1,315 @@
-import Map from 'ol/Map.js';
-import View from 'ol/View.js';
-import Polygon from 'ol/geom/Polygon.js';
-import Draw, { createBox, createRegularPolygon } from 'ol/interaction/Draw.js';
-import Select from 'ol/interaction/Select.js';
-import Modify from 'ol/interaction/Modify.js';
-import Snap from 'ol/interaction/Snap.js';
-
-import TileLayer from 'ol/layer/Tile.js';
-import VectorLayer from 'ol/layer/Vector.js';
-import OSM from 'ol/source/OSM.js';
-import VectorSource from 'ol/source/Vector.js';
-
-import { defaults as defaultControls } from 'ol/control/defaults.js';
-import ScaleLine from 'ol/control/ScaleLine.js';
-import OverviewMap from 'ol/control/OverviewMap.js';
-
-/* 타일 CORS 허용(내보내기용) */
-const raster = new TileLayer({
-  source: new OSM({ crossOrigin: 'anonymous' }),
+/* =========================
+ * 레이어/소스
+ * ========================= */
+var raster = new ol.layer.Tile({
+    source: new ol.source.OSM({crossOrigin: 'anonymous'})
 });
 
-const source = new VectorSource({ wrapX: false });
+var source = new ol.source.Vector({wrapX: false});
 
-const vector = new VectorLayer({ source });
-
-/* 인덱스맵용 레이어 */
-const overviewLayer = new TileLayer({
-  source: new OSM({ crossOrigin: 'anonymous' }),
+var vector = new ol.layer.Vector({
+    source: source
 });
 
-/* 지도 */
-const map = new Map({
-  layers: [raster, vector],
-  target: 'map',
-  view: new View({
-    center: [14133319.4, 4517014.6], // 서울시청 좌표 (Web Mercator)
-    zoom: 12,
-  }),
+var overviewLayer = new ol.layer.Tile({
+    source: new ol.source.OSM({crossOrigin: 'anonymous'})
+});
 
-  controls: defaultControls().extend([
-    new ScaleLine(),
-    new OverviewMap({
-      collapsed: false,
-      layers: [overviewLayer],
-      className: 'ol-overviewmap ol-custom-overviewmap'
+/* =========================
+ * 지도/컨트롤
+ * ========================= */
+var map = new ol.Map({
+    target: 'map',
+    layers: [raster, vector],
+    view: new ol.View({
+        center: [14133319.4, 4517014.6],
+        zoom: 12
     }),
-  ]),
+    controls: ol.control.defaults().extend([
+        new ol.control.ScaleLine(),
+        new ol.control.OverviewMap({
+            collapsed: false,
+            layers: [overviewLayer],
+            className: 'ol-overviewmap ol-custom-overviewmap'
+        })
+    ])
 });
 
-/* 그리기 */
-const typeSelect = document.getElementById('type');
-let draw;
-function addInteraction() {
-  let value = typeSelect.value;
-  if (value !== 'None') {
-    let geometryFunction;
-    if (value === 'Square') {
-      value = 'Circle';
-      geometryFunction = createRegularPolygon(4);
-    } else if (value === 'Box') {
-      value = 'Circle';
-      geometryFunction = createBox();
-    } else if (value === 'Star') {
-      value = 'Circle';
-      geometryFunction = function (coordinates, geometry) {
-        const center = coordinates[0];
-        const last = coordinates[coordinates.length - 1];
-        const dx = center[0] - last[0];
-        const dy = center[1] - last[1];
-        const radius = Math.sqrt(dx * dx + dy * dy);
-        const rotation = Math.atan2(dy, dx);
-        const newCoordinates = [];
-        const numPoints = 12;
-        for (let i = 0; i < numPoints; ++i) {
-          const angle = rotation + (i * 2 * Math.PI) / numPoints;
-          const fraction = i % 2 === 0 ? 1 : 0.5;
-          const offsetX = radius * fraction * Math.cos(angle);
-          const offsetY = radius * fraction * Math.sin(angle);
-          newCoordinates.push([center[0] + offsetX, center[1] + offsetY]);
+/* =========================
+ * 헬퍼: 스타 지오메트리
+ * ========================= */
+function createStarGeometryFn() {
+    return function (coordinates, geometry) {
+        var center = coordinates[0];
+        var last = coordinates[coordinates.length - 1];
+
+        var dx = center[0] - last[0];
+        var dy = center[1] - last[1];
+        var radius = Math.sqrt(dx * dx + dy * dy);
+        var rotation = Math.atan2(dy, dx);
+
+        var ring = [];
+        var num = 12;
+        for (var i = 0; i < num; i++) {
+            var angle = rotation + (i * 2 * Math.PI) / num;
+            var frac = (i % 2 === 0) ? 1 : 0.5;
+            ring.push([
+                center[0] + radius * frac * Math.cos(angle),
+                center[1] + radius * frac * Math.sin(angle)
+            ]);
         }
-        newCoordinates.push(newCoordinates[0].slice());
-        if (!geometry) {
-          geometry = new Polygon([newCoordinates]);
-        } else {
-          geometry.setCoordinates([newCoordinates]);
-        }
+        ring.push(ring[0].slice());
+
+        if (!geometry) geometry = new ol.geom.Polygon([ring]);
+        else geometry.setCoordinates([ring]);
+
         return geometry;
-      };
-    }
-    draw = new Draw({ source, type: value, geometryFunction });
-    map.addInteraction(draw);
-  }
+    };
 }
+
+
+/* =========================
+ * 그리기 인터랙션
+ * ========================= */
+var typeSelect = document.getElementById('type');
+var draw = null;
+
+function addInteraction() {
+    var value = typeSelect.value;
+    if (value === 'None') return;
+
+    var geomFn = undefined;
+    if (value === 'Square') {
+        value = 'Circle';
+        geomFn = ol.interaction.Draw.createRegularPolygon(4);
+    } else if (value === 'Box') {
+        value = 'Circle';
+        geomFn = ol.interaction.Draw.createBox();
+    } else if (value === 'Star') {
+        value = 'Circle';
+        geomFn = createStarGeometryFn();
+    }
+
+    draw = new ol.interaction.Draw({
+        source: source,
+        type: /** @type {ol.geom.GeometryType} */ (value),
+        geometryFunction: geomFn
+    });
+    map.addInteraction(draw);
+}
+
+function removeDraw() {
+    if (!draw) return;
+    map.removeInteraction(draw);
+    draw = null;
+}
+
 typeSelect.onchange = function () {
-  if (draw) map.removeInteraction(draw);
-  addInteraction();
+    removeDraw();
+    addInteraction();
 };
-document.getElementById('undo').addEventListener('click', () => {
-  if (draw) draw.removeLastPoint();
+
+document.getElementById('undo').addEventListener('click', function () {
+    if (draw) draw.removeLastPoint();
 });
+
 addInteraction();
 
-/* 선택/수정/스냅 */
-const select = new Select();                  // 클릭으로 피처 선택
+/* =========================
+ * 선택/수정/스냅
+ * ========================= */
+var select = new ol.interaction.Select();
 map.addInteraction(select);
 
-const modify = new Modify({ features: select.getFeatures() });
+var modify = new ol.interaction.Modify({
+    features: select.getFeatures()
+});
 map.addInteraction(modify);
-modify.setActive(false);                      // 기본 OFF
+modify.setActive(false);
 
-const snap = new Snap({ source });
+var snap = new ol.interaction.Snap({source: source});
 map.addInteraction(snap);
 
-/* 수정 토글 */
-const btnModify = document.getElementById('btnModify');
-btnModify.addEventListener('click', () => {
-  const next = !modify.getActive();
-  modify.setActive(next);
-  btnModify.textContent = `수정: ${next ? 'ON' : 'OFF'}`;
+/* =========================
+ * 버튼 동작
+ * ========================= */
+var btnModify = document.getElementById('btnModify');
+btnModify.addEventListener('click', function () {
+    var next = !modify.getActive();
+    modify.setActive(next);
+    btnModify.textContent = '수정: ' + (next ? 'ON' : 'OFF');
 });
 
-/* 선택 삭제 */
 function removeSelected() {
-  const features = select.getFeatures();
-  features.forEach(f => source.removeFeature(f));
-  features.clear();
+    var features = select.getFeatures();
+    features.forEach(function (f) {
+        source.removeFeature(f);
+    });
+    features.clear();
 }
+
 document.getElementById('btnDelete').addEventListener('click', removeSelected);
 
-/* 키보드(Delete/Backspace)로도 삭제 */
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
+window.addEventListener('keydown', function (e) {
+    if (e.key === 'Delete' || e.key === 'Backspace') removeSelected();
 });
 
-/* 전체 삭제 */
-document.getElementById('btnClear').addEventListener('click', () => {
-  source.clear();
-  select.getFeatures().clear();
+document.getElementById('btnClear').addEventListener('click', function () {
+    source.clear();
+    select.getFeatures().clear();
 });
 
-/* PNG 저장 */
+/* =========================
+ * PNG 저장
+ * ========================= */
 function exportPNG() {
-  map.once('rendercomplete', function () {
-    const size = map.getSize();
-    const mapCanvas = document.createElement('canvas');
-    mapCanvas.width = size[0];
-    mapCanvas.height = size[1];
-    const mapContext = mapCanvas.getContext('2d');
+    map.once('postcompose', function () {
+        var size = map.getSize();
+        var out = document.createElement('canvas');
+        out.width = size[0];
+        out.height = size[1];
 
-    const canvases = map.getViewport().querySelectorAll('.ol-layer canvas, canvas.ol-fixedoverlay');
-    Array.prototype.forEach.call(canvases, (canvas) => {
-      if (canvas.width <= 0) return;
-      const opacity = canvas.parentNode.style.opacity;
-      mapContext.globalAlpha = opacity === '' ? 1 : Number(opacity);
+        var ctx = out.getContext('2d');
+        var canvases = map.getViewport().querySelectorAll('.ol-layer canvas');
 
-      const transform = canvas.style.transform;
-      let matrix = [1, 0, 0, 1, 0, 0];
-      if (transform && transform.startsWith('matrix')) {
-        matrix = transform
-            .match(/^matrix\(([^\(]*)\)$/)[1]
-            .split(',')
-            .map(Number);
-      }
-      mapContext.setTransform(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]);
+        Array.prototype.forEach.call(canvases, function (c) {
+            if (c.width <= 0) return;
 
-      const bg = canvas.style.backgroundColor;
-      if (bg) {
-        mapContext.fillStyle = bg;
-        mapContext.fillRect(0, 0, canvas.width, canvas.height);
-      }
-      mapContext.drawImage(canvas, 0, 0);
+            var opacity = c.parentNode.style.opacity;
+            ctx.globalAlpha = opacity === '' ? 1 : Number(opacity);
+
+            var t = c.style.transform;
+            var m = [1, 0, 0, 1, 0, 0];
+            if (t && t.indexOf('matrix') === 0) {
+                m = t.match(/^matrix\(([^\(]*)\)$/)[1].split(',').map(Number);
+            }
+            ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+
+            var bg = c.style.backgroundColor;
+            if (bg) {
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, c.width, c.height);
+            }
+            ctx.drawImage(c, 0, 0);
+        });
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+        var a = document.createElement('a');
+        a.href = out.toDataURL('image/png');
+        a.download = 'map.png';
+        a.click();
     });
 
-    mapContext.setTransform(1, 0, 0, 1, 0, 0);
-    const link = document.createElement('a');
-    link.href = mapCanvas.toDataURL('image/png');
-    link.download = 'map.png';
-    link.click();
-  });
-  map.renderSync();
+    map.renderSync();
 }
+
+/* =========================
+ * WFS(BBOX) - GET + GeoJSON
+ * ========================= */
+var WFS_URL = 'https://ahocevar.com/geoserver/wfs'; // 실제 서비스로 교체 가능
+var TYPE_NAME = 'osm:water_areas';                   // 실제 레이어로 교체
+
+var wfsSource = new ol.source.Vector({
+    format: new ol.format.GeoJSON(),
+    url: function (extent) {
+        return (
+            WFS_URL +
+            '?service=WFS&version=1.1.0&request=GetFeature' +
+            '&typename=' + encodeURIComponent(TYPE_NAME) +
+            '&outputFormat=application/json' +
+            '&srsname=EPSG:3857' +
+            '&bbox=' + extent.join(',') + ',EPSG:3857'
+        );
+    },
+    strategy: ol.loadingstrategy.bbox
+});
+
+var wfsLayer = new ol.layer.Vector({
+    source: wfsSource,
+    style: new ol.style.Style({
+        stroke: new ol.style.Stroke({
+            color: 'rgba(33, 150, 243, 1)', // 파란색 계열
+            width: 2
+        }),
+        fill: new ol.style.Fill({
+            color: 'rgba(33, 150, 243, 0.15)' // 투명도 있는 파란색
+        }),
+        image: new ol.style.Circle({
+            radius: 5,
+            fill: new ol.style.Fill({
+                color: 'rgba(255, 193, 7, 1)' // 노란색 포인트
+            }),
+            stroke: new ol.style.Stroke({
+                color: 'rgba(33, 150, 243, 1)',
+                width: 1
+            })
+        })
+    })
+});
+
+map.addLayer(wfsLayer);
+
+// 로드 로그(디버깅)
+wfsSource.on('featuresloadstart', function () {
+    console.log('WFS load start');
+});
+wfsSource.on('featuresloadend', function (e) {
+    console.log('WFS load end, count=', (e.features || []).length);
+});
+wfsSource.on('featuresloaderror', function (e) {
+    console.error('WFS load error', e);
+});
+
+// 수동 새로고침(옵션)
+function reloadWFS() {
+    wfsSource.clear(true);
+    wfsSource.refresh();
+}
+
+
+/* =========================
+ * WFS(POST) - Filter 예시
+ * ========================= */
+function loadWFSWithFilter() {
+    // 예시: name LIKE 'Mississippi%' AND waterway = 'riverbank'
+    var fLike = ol.format.filter.like('name', 'Mississippi*');
+    var fEq = ol.format.filter.equalTo('waterway', 'riverbank');
+    var fAnd = ol.format.filter.and(fLike, fEq);
+
+    var wfsFormat = new ol.format.WFS();
+    var featureRequest = wfsFormat.writeGetFeature({
+        srsName: 'EPSG:3857',
+        featureNS: 'http://www.openstreetmap.org', // 네임스페이스 정확히
+        featurePrefix: 'osm',
+        featureTypes: ['water_areas'],
+        outputFormat: 'application/json',
+        filter: fAnd
+    });
+
+    fetch(WFS_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'text/xml'},
+        body: new XMLSerializer().serializeToString(featureRequest)
+    })
+        .then(function (resp) {
+            return resp.json();
+        })
+        .then(function (json) {
+            // 투영 지정(중요): dataProjection=EPSG:3857, featureProjection=지도뷰(EPSG:3857)
+            var feats = new ol.format.GeoJSON().readFeatures(json, {
+                dataProjection: 'EPSG:3857',
+                featureProjection: map.getView().getProjection()
+            });
+            wfsSource.clear();
+            wfsSource.addFeatures(feats);
+            if (feats.length) map.getView().fit(wfsSource.getExtent(), {size: map.getSize(), maxZoom: 16});
+        })
+        .catch(function (err) {
+            console.error('WFS POST error', err);
+        });
+}
+
+
 document.getElementById('btnSavePNG').addEventListener('click', exportPNG);
+document.getElementById('btnReloadWFS')?.addEventListener('click', reloadWFS);
