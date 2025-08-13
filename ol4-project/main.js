@@ -10,6 +10,18 @@ var view = new ol.View({
 // ===== 레이어 =====
 var base = new ol.layer.Tile({source: new ol.source.OSM(), zIndex: -1});
 
+// === 사용자 도형 전용 소스/레이어 (WFS랑 분리)
+var drawSource = new ol.source.Vector();
+var drawLayer = new ol.layer.Vector({
+    source: drawSource,
+    style: new ol.style.Style({
+        fill:   new ol.style.Fill({ color: 'rgba(0, 153, 255, 0.15)' }),
+        stroke: new ol.style.Stroke({ color: '#0099ff', width: 2 }),
+        image:  new ol.style.Circle({ radius: 5, fill: new ol.style.Fill({color: '#0099ff'}) })
+    }),
+    zIndex: 5
+});
+
 // WMS
 var wmsSource = new ol.source.TileWMS({
     url: 'https://ahocevar.com/geoserver/wms',
@@ -54,7 +66,7 @@ fetch(wfsUrl)
 // ===== 지도 =====
 var map = new ol.Map({
     target: 'map',
-    layers: [base, wmsLayer, wfsLayer],
+    layers: [base, wmsLayer, wfsLayer,drawLayer],
     view: view,
     controls: ol.control.defaults({attribution: true})
 });
@@ -199,4 +211,89 @@ document.getElementById('collapse').onclick = function () {
     var hidden = body.style.display === 'none';
     body.style.display = hidden ? '' : 'none';
     this.textContent = hidden ? '접기' : '펼치기';
+};
+// ===== 그리기/수정/지우기 =====
+var drawInteraction = null;
+var modifyInteraction = null;
+
+function stopDrawing() {
+    if (drawInteraction) {
+        map.removeInteraction(drawInteraction);
+        drawInteraction = null;
+    }
+    // 버튼 텍스트 원복
+    document.getElementById('drawPoint').textContent = '점 그리기';
+    document.getElementById('drawLine').textContent  = '선 그리기';
+    document.getElementById('drawPoly').textContent  = '폴리곤 그리기';
+}
+
+// 공통: 타입별 그리기 시작/토글
+function toggleDraw(type, btnEl) {
+    // 이미 그리는 중이면 종료
+    if (drawInteraction) {
+        stopDrawing();
+        return;
+    }
+    // 수정 모드가 켜져 있으면 잠시 꺼줌(겹침 방지)
+    if (modifyInteraction) {
+        map.removeInteraction(modifyInteraction);
+        modifyInteraction = null;
+        document.getElementById('toggleModify').textContent = '수정 모드 켜기';
+    }
+
+    drawInteraction = new ol.interaction.Draw({
+        source: drawSource,  // 사용자 도형은 drawSource에만 넣음
+        type: type           // 'Point' | 'LineString' | 'Polygon'
+    });
+    map.addInteraction(drawInteraction);
+
+    // 완료 시 버튼 텍스트 원복
+    drawInteraction.on('drawend', function() {
+        stopDrawing();
+    });
+
+    // 현재 버튼만 “그리기 종료”로 표시
+    btnEl.textContent = '그리기 종료';
+}
+
+// 버튼 이벤트
+document.getElementById('drawPoint').onclick = function() {
+    toggleDraw('Point', this);
+};
+document.getElementById('drawLine').onclick = function() {
+    toggleDraw('LineString', this);
+};
+document.getElementById('drawPoly').onclick = function() {
+    toggleDraw('Polygon', this);
+};
+
+// 수정 모드 토글 (Modify)
+document.getElementById('toggleModify').onclick = function() {
+    // 그리기 중이면 먼저 종료
+    if (drawInteraction) stopDrawing();
+
+    if (modifyInteraction) {
+        map.removeInteraction(modifyInteraction);
+        modifyInteraction = null;
+        this.textContent = '수정 모드 켜기';
+        return;
+    }
+    modifyInteraction = new ol.interaction.Modify({
+        source: drawSource
+        // 또는 features: new ol.Collection(drawSource.getFeatures())
+    });
+    map.addInteraction(modifyInteraction);
+    this.textContent = '수정 모드 끄기';
+};
+
+// 전체 지우기 (사용자 도형만 삭제)
+document.getElementById('clearAll').onclick = function() {
+    // 그리기/수정 중지
+    stopDrawing();
+    if (modifyInteraction) {
+        map.removeInteraction(modifyInteraction);
+        modifyInteraction = null;
+        document.getElementById('toggleModify').textContent = '수정 모드 켜기';
+    }
+    drawSource.clear(); // 사용자 도형만 싹 지움
 };
