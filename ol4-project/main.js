@@ -297,3 +297,14 @@ document.getElementById('clearAll').onclick = function() {
     }
     drawSource.clear(); // 사용자 도형만 싹 지움
 };
+
+document.getElementById('saveImage')?.addEventListener('click', function () {
+    map.once('postcompose', function(event) {
+        var canvas = event.context.canvas;
+        var a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'map.png';
+        a.click();
+    });
+    map.renderSync();
+});
