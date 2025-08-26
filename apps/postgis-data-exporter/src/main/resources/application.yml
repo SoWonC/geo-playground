@@ -1,0 +1,9 @@
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: 12345678
+
+server:
+  port: 8081  # 원하는 포트로 지정 가능
