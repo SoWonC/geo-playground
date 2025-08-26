@@ -1,0 +1,80 @@
+@import "node_modules/ol/ol.css";
+
+
+:root { --toolbar-h: 64px; }
+
+html, body { height: 100%; margin: 0; }
+body {
+  padding-top: var(--toolbar-h); /* 상단 고정 툴바 높이만큼 여백 */
+
+}
+
+.toolbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--toolbar-h);
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255,255,255,.9);
+  backdrop-filter: saturate(140%) blur(6px);
+  z-index: 2000;
+
+  border-bottom: 2px solid rgba(0,0,0,0.2); /* 하단 테두리 */
+  border-radius: 0 0 8px 8px; /* 아래쪽 모서리 둥글게 */
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15); /* 그림자 */
+}
+
+
+/* 지도 컨테이너: 화면 중앙 정렬 */
+.content {
+  min-height: calc(100vh - var(--toolbar-h));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* 지도 크기 */
+.map {
+  width: min(100%, 1000px);
+  height: 520px;
+  background: #000; /* 타일 로딩 전 깜빡임 방지 */
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 스케일바 */
+.ol-scale-line {
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin: 6px;
+}
+
+/* 인덱스맵 */
+.ol-overviewmap {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: inline-block !important;
+  padding: 0 !important;
+  position: absolute !important;
+  right: 8px !important;
+  bottom: 48px !important;
+}
+.ol-overviewmap .ol-overviewmap-map {
+  width: 140px !important;
+  height: 110px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.ol-overviewmap button {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* 컨트롤 입력 문제 방지 */
+.ol-control { pointer-events: auto !important; }
